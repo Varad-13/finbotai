@@ -6,7 +6,7 @@ from openai import OpenAI
 from config import BOT_TOKEN, OPENROUTER_API_KEY, MODEL
 from tools import TOOL_MAPPING
 from tools_def import tools
-from models import save_message_orm
+from models import save_message_orm, get_all_messages_orm
 
 logging.basicConfig(level=logging.INFO)
 
@@ -23,12 +23,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         You must authenticate the user with their phone number, then register their store based on business categories.
     """
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_input},
-    ]
+    # Retrieve full conversation history from DB
+    conversation_history = get_all_messages_orm()
 
-    # Save user message
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Append conversation history messages except system prompt (avoid duplicate system prompt)
+    for msg in conversation_history:
+        # Safety: skip system prompts saved before, keep only one initial
+        if msg.role == "system":
+            continue
+        messages.append({"role": msg.role, "content": msg.content})
+
+    # Append current user message
+    messages.append({"role": "user", "content": user_input})
+
+    # Save current user message
     save_message_orm("user", user_input)
 
     # Step 1: Ask model what it wants to do
