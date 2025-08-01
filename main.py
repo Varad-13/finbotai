@@ -6,9 +6,9 @@ from openai import OpenAI
 from config import BOT_TOKEN, OPENROUTER_API_KEY, MODEL
 from tools import TOOL_MAPPING
 from tools_def import tools
-from models import save_message_orm, get_all_messages_orm
+from models import save_message_orm, get_conversation_messages_orm
 
-logging.basicConfig(level=logging.WARNING)  # Changed from INFO to WARNING to reduce spam logs
+logging.basicConfig(level=logging.WARNING)  # To reduce spam logs
 
 openai_client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -17,18 +17,20 @@ openai_client = OpenAI(
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
+    # Use chat_id as conversation identifier
+    conversation_id = str(update.effective_chat.id)
 
     system_prompt = """
         You are an onboarding assistant for Fridayy.
         You must authenticate the user with their phone number, then register their store based on business categories.
     """
 
-    # Retrieve full conversation history from DB
-    conversation_history = get_all_messages_orm()
+    # Retrieve full conversation history for this conversation
+    conversation_history = get_conversation_messages_orm(conversation_id)
 
     messages = [{"role": "system", "content": system_prompt}]
 
-    # Append conversation history messages except system prompt (avoid duplicate system prompt)
+    # Append conversation history messages except system prompt
     for msg in conversation_history:
         if msg.role == "system":
             continue
@@ -36,7 +38,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     messages.append({"role": "user", "content": user_input})
 
-    save_message_orm("user", user_input)
+    # Save current user message
+    save_message_orm(conversation_id, "user", user_input)
 
     response = openai_client.chat.completions.create(
         model=MODEL,
@@ -45,7 +48,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     assistant_message = response.choices[0].message
 
-    save_message_orm("assistant", assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message))
+    # Save assistant message
+    save_message_orm(conversation_id, "assistant", assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message))
 
     if hasattr(assistant_message, "tool_calls") and assistant_message.tool_calls:
         tool_call = assistant_message.tool_calls[0]
@@ -62,7 +66,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "content": json.dumps(tool_result),
         })
 
-        save_message_orm("tool", json.dumps(tool_result))
+        # Save tool result
+        save_message_orm(conversation_id, "tool", json.dumps(tool_result))
 
         final_response = openai_client.chat.completions.create(
             model=MODEL,
