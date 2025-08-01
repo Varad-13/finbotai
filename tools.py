@@ -12,7 +12,7 @@ def auth_vendor(phone_no):
 def create_store(categories, token):
     headers = {"Authorization": f"Bearer {token}"}
     res = requests.post(base_url+"/ocr/create_store/", json={"categories": categories}, headers=headers)
-    return {"store_id": res.json().get("store_id")}
+    return {"store_id": res.json().get("id")}
 
 TOOL_MAPPING = {
     "auth_vendor": auth_vendor,
