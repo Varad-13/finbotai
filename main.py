@@ -6,7 +6,7 @@ from openai import OpenAI
 from config import BOT_TOKEN, OPENROUTER_API_KEY, MODEL
 from tools import TOOL_MAPPING
 from tools_def import tools
-from db import save_message
+from models import save_message_orm
 
 logging.basicConfig(level=logging.INFO)
 
@@ -29,7 +29,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     # Save user message
-    save_message("user", user_input)
+    save_message_orm("user", user_input)
 
     # Step 1: Ask model what it wants to do
     response = openai_client.chat.completions.create(
@@ -41,7 +41,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(f"Assistant response: {assistant_message}")
 
     # Save assistant message
-    save_message("assistant", assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message))
+    save_message_orm("assistant", assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message))
 
     # Step 2: If tool call requested, run tool and send back results
     if hasattr(assistant_message, "tool_calls") and assistant_message.tool_calls:
@@ -62,7 +62,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
 
         # Save tool result
-        save_message("tool", json.dumps(tool_result))
+        save_message_orm("tool", json.dumps(tool_result))
 
         # Step 3: Finalize response with updated context
         final_response = openai_client.chat.completions.create(
