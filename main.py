@@ -8,7 +8,7 @@ from tools import TOOL_MAPPING
 from tools_def import tools
 from models import save_message_orm, get_all_messages_orm
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)  # Changed from INFO to WARNING to reduce spam logs
 
 openai_client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -30,38 +30,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Append conversation history messages except system prompt (avoid duplicate system prompt)
     for msg in conversation_history:
-        # Safety: skip system prompts saved before, keep only one initial
         if msg.role == "system":
             continue
         messages.append({"role": msg.role, "content": msg.content})
 
-    # Append current user message
     messages.append({"role": "user", "content": user_input})
 
-    # Save current user message
     save_message_orm("user", user_input)
 
-    # Step 1: Ask model what it wants to do
     response = openai_client.chat.completions.create(
         model=MODEL,
         messages=messages,
         tools=tools,
     )
     assistant_message = response.choices[0].message
-    logging.info(f"Assistant response: {assistant_message}")
 
-    # Save assistant message
     save_message_orm("assistant", assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message))
 
-    # Step 2: If tool call requested, run tool and send back results
     if hasattr(assistant_message, "tool_calls") and assistant_message.tool_calls:
         tool_call = assistant_message.tool_calls[0]
         tool_name = tool_call.function.name
         tool_args = json.loads(tool_call.function.arguments)
-        logging.info(f"Calling tool: {tool_name} with args: {tool_args}")
 
         tool_result = TOOL_MAPPING[tool_name](**tool_args)
-        logging.info(f"Tool result: {tool_result}")
 
         messages.append(assistant_message)
         messages.append({
@@ -71,10 +62,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "content": json.dumps(tool_result),
         })
 
-        # Save tool result
         save_message_orm("tool", json.dumps(tool_result))
 
-        # Step 3: Finalize response with updated context
         final_response = openai_client.chat.completions.create(
             model=MODEL,
             messages=messages,
@@ -83,7 +72,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         final_text = final_response.choices[0].message.content
         await update.message.reply_text(final_text)
     else:
-        # No tool call - just reply with content
         await update.message.reply_text(assistant_message.content or "I didn't understand that.")
 
 if __name__ == '__main__':
