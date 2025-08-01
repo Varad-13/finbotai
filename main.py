@@ -57,7 +57,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             formatted["content"] = None
 
         messages.append(formatted)
-        print(messages)
 
     # Add current user input
     messages.append({"role": "user", "content": user_input})
@@ -70,7 +69,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tools=tools,
     )
     assistant_msg = response.choices[0].message
-    print(assistant_msg)
 
     # If the model triggers a tool call
     if hasattr(assistant_msg, "tool_calls") and assistant_msg.tool_calls:
