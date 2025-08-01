@@ -6,6 +6,7 @@ from openai import OpenAI
 from config import BOT_TOKEN, OPENROUTER_API_KEY, MODEL
 from tools import TOOL_MAPPING
 from tools_def import tools
+from db import save_message
 
 logging.basicConfig(level=logging.INFO)
 
@@ -18,7 +19,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
 
     system_prompt = """
-        You are an onboarding assistant for Fridayy. 
+        You are an onboarding assistant for Fridayy.
         You must authenticate the user with their phone number, then register their store based on business categories.
     """
 
@@ -26,6 +27,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_input},
     ]
+
+    # Save user message
+    save_message("user", user_input)
 
     # Step 1: Ask model what it wants to do
     response = openai_client.chat.completions.create(
@@ -35,6 +39,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     assistant_message = response.choices[0].message
     logging.info(f"Assistant response: {assistant_message}")
+
+    # Save assistant message
+    save_message("assistant", assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message))
 
     # Step 2: If tool call requested, run tool and send back results
     if hasattr(assistant_message, "tool_calls") and assistant_message.tool_calls:
@@ -53,6 +60,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "name": tool_name,
             "content": json.dumps(tool_result),
         })
+
+        # Save tool result
+        save_message("tool", json.dumps(tool_result))
 
         # Step 3: Finalize response with updated context
         final_response = openai_client.chat.completions.create(
